@@ -207,7 +207,6 @@ export default function OrdersPage() {
                     <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                       <Button
                         size="sm"
-                        variant="default"
                         className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
                         onClick={() => handleUpdateStatus(order.id, "aceito")}
                       >

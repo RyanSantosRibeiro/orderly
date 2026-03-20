@@ -1,7 +1,7 @@
 "use client"
 import React from 'react';
 
-type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'destructive' | 'ghost' | 'link';
+type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'destructive' | 'ghost' | 'link' | 'default';
 type ButtonSize = 'sm' | 'md' | 'lg' | 'icon';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -29,6 +29,7 @@ export const Button: React.FC<ButtonProps> = ({
 
   // Variants mapping
   const variants: Record<ButtonVariant, string> = {
+    default: "bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20 focus:ring-primary",
     primary: "bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20 focus:ring-primary",
     secondary: "bg-secondary hover:bg-secondary/80 text-secondary-foreground focus:ring-secondary",
     outline: "border border-border bg-transparent hover:bg-accent hover:text-accent-foreground text-foreground focus:ring-ring",
