@@ -20,7 +20,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet"
-import { ShoppingCart, Plus, Minus, Store, User, MapPin, Share2, Info, X, History, Receipt, Clock } from "lucide-react"
+import { ShoppingCart, Plus, Minus, Store, User, MapPin, Share2, Info, X, History, Receipt, Clock, Bed } from "lucide-react"
 
 const mockCategories = ["Oferta", "Entradinhas", "Entradas", "Camarões", "Peixe", "Bebidas", "Sobremesas"]
 const mockProducts = [
@@ -213,6 +213,15 @@ export default function MenuClient({
   const [pin, setPin] = useState("")
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [authError, setAuthError] = useState(false)
+  const [deliveryLocation, setDeliveryLocation] = useState("Meu Local")
+
+  useEffect(() => {
+    if (mesa) {
+      if (mesa.toLowerCase().includes("mesa")) setDeliveryLocation("Mesa")
+      else if (mesa.toLowerCase().includes("dayuse")) setDeliveryLocation("Piscina")
+      else setDeliveryLocation("Meu Quarto")
+    }
+  }, [mesa])
 
   // Chave única para o localStorage baseada no estabelecimento e mesa
   const authKey = mesa ? `auth_${slug}_${mesa}` : null
@@ -243,7 +252,8 @@ export default function MenuClient({
       id: `ORD-${Math.floor(1000 + Math.random() * 9000)}`,
       date: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
       items: cart.map(item => ({ ...item })),
-      total: cartTotal
+      total: cartTotal,
+      location: deliveryLocation
     }
 
     const updatedHistory = [newOrder, ...history]
@@ -495,8 +505,28 @@ export default function MenuClient({
                     )}
                   </div>
                   {cart.length > 0 && (
-                    <div className="p-4 border-t bg-white shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
-                      <div className="flex justify-between mb-4 text-lg font-bold">
+                    <div className="p-4 border-t bg-white shadow-[0_-10px_40px_rgba(0,0,0,0.05)] space-y-6">
+                      <div className="space-y-3">
+                         <Label className="text-xs uppercase font-black text-slate-400 tracking-widest pl-1">Onde você está?</Label>
+                         <div className="grid grid-cols-2 gap-2">
+                            {["Meu Quarto", "Piscina", "Restaurante", "Recepção"].map((loc) => (
+                              <Button
+                                key={loc}
+                                variant="outline"
+                                size="sm"
+                                className={`h-11 font-bold rounded-xl transition-all border-slate-200 ${deliveryLocation === loc ? "bg-slate-900  border-slate-900" : "text-slate-500 hover:bg-slate-50"}`}
+                                onClick={() => setDeliveryLocation(loc)}
+                              >
+                                {loc === "Meu Quarto" && <Bed className="w-3 h-3 mr-2" />}
+                                {loc === "Piscina" && <Info className="w-3 h-3 mr-2 text-sky-500" />}
+                                {loc === "Restaurante" && <Store className="w-3 h-3 mr-2 text-orange-500" />}
+                                {loc}
+                              </Button>
+                            ))}
+                         </div>
+                      </div>
+
+                      <div className="flex justify-between text-lg font-bold pt-2 border-t border-dashed border-slate-100">
                         <span>Total</span>
                         <span className="text-primary">{formatPrice(cartTotal)}</span>
                       </div>
@@ -548,9 +578,16 @@ export default function MenuClient({
                             <div className="flex justify-between items-start mb-4">
                               <div>
                                 <p className="text-xs font-black text-slate-400 uppercase tracking-widest">{order.id}</p>
-                                <div className="flex items-center gap-1.5 mt-1">
-                                  <Clock className="w-3 h-3 text-slate-400" />
-                                  <p className="text-sm font-bold text-slate-600">{order.date}</p>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <div className="flex items-center gap-1">
+                                    <Clock className="w-3 h-3 text-slate-400" />
+                                    <p className="text-sm font-bold text-slate-600">{order.date}</p>
+                                  </div>
+                                  <span className="text-slate-300">•</span>
+                                  <div className="flex items-center gap-1">
+                                    <MapPin className="w-3 h-3 text-primary" />
+                                    <p className="text-sm font-bold text-primary">{(order as any).location || "Local não informado"}</p>
+                                  </div>
                                 </div>
                               </div>
                               <Badge variant="outline" className="bg-emerald-50 text-emerald-600 border-emerald-200 text-[10px] font-bold">

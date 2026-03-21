@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import QRCode from "qrcode"
 import {
   Card,
   CardContent,
@@ -80,12 +81,13 @@ interface CustomRoom {
   status: RoomStatus
   capacity?: number
   activeComanda?: Comanda | null
+  type: "quarto" | "avulsa"
 }
 
 const generatePin = () => Math.floor(1000 + Math.random() * 9000).toString()
 
 const mockRooms: CustomRoom[] = [
-  { id: "rm_1", number: "101", status: "livre", capacity: 2, activeComanda: null },
+  { id: "rm_1", number: "101", status: "livre", capacity: 2, activeComanda: null, type: "quarto" },
   { 
     id: "rm_2", 
     number: "102", 
@@ -103,9 +105,10 @@ const mockRooms: CustomRoom[] = [
         { id: "p2", name: "Porção de Fritas G", price: 45.50, quantity: 1 },
         { id: "p3", name: "Água mineral", price: 8.00, quantity: 5 },
       ]
-    }
+    },
+    type: "quarto"
   },
-  { id: "rm_103", number: "103", status: "manutencao", capacity: 3, activeComanda: null },
+  { id: "rm_103", number: "103", status: "manutencao", capacity: 3, activeComanda: null, type: "quarto" },
   { 
     id: "rm_4", 
     number: "104", 
@@ -124,10 +127,11 @@ const mockRooms: CustomRoom[] = [
         { id: "p6", name: "Sobremesa Petit Gateau", price: 28.00, quantity: 2 },
         { id: "p7", name: "Vinho Tinto", price: 52.00, quantity: 1 },
       ]
-    }
+    },
+    type: "quarto"
   },
-  { id: "rm_5", number: "105", status: "livre", capacity: 4, activeComanda: null },
-  { id: "rm_201", number: "201", status: "livre", capacity: 2, activeComanda: null },
+  { id: "rm_5", number: "105", status: "livre", capacity: 4, activeComanda: null, type: "quarto" },
+  { id: "rm_201", number: "201", status: "livre", capacity: 2, activeComanda: null, type: "quarto" },
   { 
     id: "rm_202", 
     number: "202", 
@@ -145,7 +149,49 @@ const mockRooms: CustomRoom[] = [
         { id: "p9", name: "Água c/ Gás", price: 6.00, quantity: 1 },
         { id: "p10", name: "Sanduíche Natural", price: 25.90, quantity: 1 },
       ]
-    }
+    },
+    type: "quarto"
+  },
+  { id: "rm_203", number: "203", status: "livre", capacity: 2, activeComanda: null, type: "quarto" },
+  { id: "rm_204", number: "204", status: "manutencao", capacity: 2, activeComanda: null, type: "quarto" },
+
+  // Comandas Avulsas
+  { 
+    id: "av_1", 
+    number: "DayUse 01", 
+    status: "ocupado", 
+    activeComanda: {
+      id: "cmd_av1",
+      accessPin: "1234",
+      checkInDate: "20/03/2026",
+      currentAmount: 85.00,
+      lastOrder: "1x Porção de Camarão",
+      lastOrderTime: "há 5m",
+      orders: [{ id: "p11", name: "Camarão Jurerê", price: 85.00, quantity: 1 }]
+    },
+    type: "avulsa" 
+  },
+  { 
+    id: "av_2", 
+    number: "DayUse 02", 
+    status: "livre", 
+    activeComanda: null, 
+    type: "avulsa" 
+  },
+  { 
+    id: "av_3", 
+    number: "Mesa 12", 
+    status: "ocupado", 
+    activeComanda: {
+      id: "cmd_av3",
+      accessPin: "5566",
+      checkInDate: "20/03/2026",
+      currentAmount: 42.00,
+      lastOrder: "2x Cerveja Pilsen",
+      lastOrderTime: "há 10m",
+      orders: [{ id: "p12", name: "Cerveja Pilsen", price: 21.00, quantity: 2 }]
+    },
+    type: "avulsa" 
   },
   // Adding more mock rooms to demonstrate the grid
   ...Array.from({ length: 24 }).map((_, i) => ({
@@ -153,7 +199,8 @@ const mockRooms: CustomRoom[] = [
     number: (203 + i).toString(),
     status: (i % 5 === 0 ? "manutencao" : "livre") as RoomStatus,
     capacity: 2,
-    activeComanda: null
+    activeComanda: null,
+    type: "quarto" as const
   }))
 ]
 
@@ -176,6 +223,11 @@ export default function RoomsPage() {
   const [tempNum, setTempNum] = useState("")
   const [tempStatus, setTempStatus] = useState<RoomStatus>("livre")
   const [tempCap, setTempCap] = useState("2")
+  const [tempType, setTempType] = useState<"quarto" | "avulsa">("quarto")
+
+  const [qrCodeUrl, setQrCodeUrl] = useState<string>("")
+  const companySlug = "pousada-fazendinha" // Idealmente viria do contexto da empresa
+  const productionUrl = process.env.NEXT_PUBLIC_PRODUCTION_URL || "http://localhost:3000"
 
   const filteredRooms = rooms.filter((r) =>
     r.number.toLowerCase().includes(searchTerm.toLowerCase())
@@ -192,6 +244,7 @@ export default function RoomsPage() {
       setTempNum(room.number)
       setTempStatus(room.status)
       setTempCap(room.capacity?.toString() || "2")
+      setTempType(room.type)
     } else {
       setEditingRoom(null)
       const lastNum = rooms.filter(r => !isNaN(Number(r.number))).sort((a,b) => Number(b.number) - Number(a.number))[0]?.number
@@ -200,6 +253,7 @@ export default function RoomsPage() {
       setTempNum(nextNum)
       setTempStatus("livre")
       setTempCap("2")
+      setTempType("quarto")
     }
     setIsModalOpen(true)
   }
@@ -208,6 +262,24 @@ export default function RoomsPage() {
     setSelectedQrRoom(room)
     setIsQrModalOpen(true)
   }
+
+  useEffect(() => {
+    if (selectedQrRoom && isQrModalOpen) {
+      const menuUrl = `${productionUrl}/${companySlug}/menu?mesa=${selectedQrRoom.number}`
+      QRCode.toDataURL(menuUrl, {
+        width: 400,
+        margin: 2,
+        color: {
+          dark: "#0f172a",
+          light: "#ffffff"
+        }
+      })
+      .then(url => setQrCodeUrl(url))
+      .catch(err => console.error("Erro ao gerar QR Code:", err))
+    } else {
+      setQrCodeUrl("")
+    }
+  }, [selectedQrRoom, isQrModalOpen, productionUrl, companySlug])
 
   const handleOpenCloseAccount = (room: CustomRoom) => {
     setIsDetailModalOpen(false) // Close detail if adding from there
@@ -221,7 +293,8 @@ export default function RoomsPage() {
         ...r, 
         number: tempNum, 
         status: tempStatus, 
-        capacity: Number(tempCap) 
+        capacity: Number(tempCap),
+        type: tempType
       } : r))
     } else {
       const newRoom: CustomRoom = {
@@ -229,7 +302,8 @@ export default function RoomsPage() {
         number: tempNum,
         status: tempStatus,
         capacity: Number(tempCap),
-        activeComanda: null
+        activeComanda: null,
+        type: tempType
       }
       setRooms([...rooms, newRoom])
     }
@@ -274,7 +348,13 @@ export default function RoomsPage() {
 
   const finalizeAccount = () => {
     if (selectedCloseRoom) {
-      changeStatus(selectedCloseRoom.id, "livre")
+      if (selectedCloseRoom.type === "avulsa") {
+        // Ao fechar uma comanda avulsa, ela é removida da vista ativa (arquivada)
+        setRooms(prev => prev.filter(r => r.id !== selectedCloseRoom.id))
+      } else {
+        // Para quartos fixos, apenas libera o status para livre
+        changeStatus(selectedCloseRoom.id, "livre")
+      }
       setIsCloseModalOpen(false)
     }
   }
@@ -327,34 +407,75 @@ export default function RoomsPage() {
       </div>
 
       {/* Grid de Quartos Compacto */}
-      <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-3 pb-8">
-         {filteredRooms.length === 0 ? (
-            <div className="col-span-full py-16 text-center text-slate-500 bg-white border border-slate-200 rounded-lg border-dashed">
-               <Coffee className="w-12 h-12 mx-auto text-slate-300 mb-4" />
-               Nenhum quarto encontrado.
-            </div>
-         ) : (
-            filteredRooms.map(room => (
-               <Card 
-                  key={room.id} 
-                  onClick={() => handleOpenDetail(room)}
-                  className={`cursor-pointer h-24 flex flex-col items-center justify-center p-2 rounded-xl transition-all hover:scale-105 active:scale-95 border-none text-white shadow-lg ${getStatusCompactClass(room.status)}`}
-               >
-                  <span className="text-2xl font-black tracking-tighter leading-none">{room.number}</span>
-                  {room.status === "ocupado" && room.activeComanda && (
-                     <span className="text-[10px] font-bold mt-1.5 px-2 py-0.5 bg-black/20 rounded-full">
-                        {new Intl.NumberFormat('pt-BR', { notation: 'compact', style: 'currency', currency: 'BRL' }).format(room.activeComanda.currentAmount)}
-                     </span>
-                  )}
-                  {room.status === "manutencao" && (
-                     <RefreshCcw className="w-3 h-3 mt-1.5 opacity-50 animate-spin-slow" />
-                  )}
-                  {room.status === "livre" && (
-                    <span className="text-[9px] uppercase font-bold mt-1.5 opacity-50 tracking-widest">Livre</span>
-                  )}
-               </Card>
-            ))
-         )}
+      <div className="space-y-8">
+        <section>
+          <div className="flex items-center gap-2 mb-4 text-slate-500">
+            <Bed className="w-5 h-5" />
+            <h2 className="text-sm uppercase font-black tracking-widest">Quartos</h2>
+            <Separator className="flex-1" />
+          </div>
+          <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-3">
+            {filteredRooms.filter(r => r.type === "quarto").length === 0 ? (
+                <div className="col-span-full py-8 text-center text-slate-400 bg-slate-50 border border-slate-100 rounded-lg border-dashed">
+                  Nenhum quarto encontrado.
+                </div>
+            ) : (
+                filteredRooms.filter(r => r.type === "quarto").map(room => (
+                  <Card 
+                      key={room.id} 
+                      onClick={() => handleOpenDetail(room)}
+                      className={`cursor-pointer h-24 flex flex-col items-center justify-center p-2 rounded-xl transition-all hover:scale-105 active:scale-95 border-none text-white shadow-lg ${getStatusCompactClass(room.status)}`}
+                  >
+                      <span className="text-2xl font-black tracking-tighter leading-none">{room.number}</span>
+                      {room.status === "ocupado" && room.activeComanda && (
+                        <span className="text-[12px] font-bold mt-1.5 px-2 py-0.5 bg-black/20 rounded-full">
+                            {new Intl.NumberFormat('pt-BR', { notation: 'compact', style: 'currency', currency: 'BRL' }).format(room.activeComanda.currentAmount)}
+                        </span>
+                      )}
+                      {room.status === "manutencao" && (
+                        <RefreshCcw className="w-3 h-3 mt-1.5 opacity-50 animate-spin-slow" />
+                      )}
+                      {room.status === "livre" && (
+                        <span className="text-[9px] uppercase font-bold mt-1.5 opacity-50 tracking-widest">Livre</span>
+                      )}
+                  </Card>
+                ))
+            )}
+          </div>
+        </section>
+
+        <section>
+          <div className="flex items-center gap-2 mb-4 text-slate-500">
+            <Receipt className="w-5 h-5" />
+            <h2 className="text-sm uppercase font-black tracking-widest">Comandas Avulsas (DayUse)</h2>
+            <Separator className="flex-1" />
+          </div>
+          <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-3">
+            {filteredRooms.filter(r => r.type === "avulsa").length === 0 ? (
+                <div className="col-span-full py-8 text-center text-slate-400 bg-slate-50 border border-slate-100 rounded-lg border-dashed">
+                  Nenhuma comanda avulsa ativa.
+                </div>
+            ) : (
+                filteredRooms.filter(r => r.type === "avulsa").map(room => (
+                  <Card 
+                      key={room.id} 
+                      onClick={() => handleOpenDetail(room)}
+                      className={`cursor-pointer h-24 flex flex-col items-center justify-center p-2 rounded-xl transition-all hover:scale-105 active:scale-95 border-none text-white shadow-lg ${getStatusCompactClass(room.status)}`}
+                  >
+                      <span className="text-base font-black tracking-tighter leading-none text-center px-1">{room.number}</span>
+                      {room.status === "ocupado" && room.activeComanda && (
+                        <span className="text-[12px] font-bold mt-1.5 px-2 py-0.5 bg-black/20 rounded-full">
+                            {new Intl.NumberFormat('pt-BR', { notation: 'compact', style: 'currency', currency: 'BRL' }).format(room.activeComanda.currentAmount)}
+                        </span>
+                      )}
+                      {room.status === "livre" && (
+                        <span className="text-[9px] uppercase font-bold mt-1.5 opacity-50 tracking-widest">Disponível</span>
+                      )}
+                  </Card>
+                ))
+            )}
+          </div>
+        </section>
       </div>
 
       {/* Modal de Detalhes do Quarto (Action Sheet) */}
@@ -366,11 +487,19 @@ export default function RoomsPage() {
                 selectedDetailRoom.status === 'livre' ? 'bg-emerald-500' : 
                 selectedDetailRoom.status === 'ocupado' ? 'bg-rose-500' : 'bg-amber-500'
               }`}>
-                <div className="flex justify-between items-start">
-                   <div>
-                      <h2 className="text-5xl font-black tracking-tighter mb-1">Quarto {selectedDetailRoom.number}</h2>
-                      <div className="flex items-center gap-4 text-white/80 font-medium">
-                         <span className="flex items-center gap-1.5"><Users className="w-4 h-4" /> Capacidade: {selectedDetailRoom.capacity}</span>
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1 pr-4">
+                       <p className="text-[10px] items-center gap-1 font-black uppercase tracking-[0.2em] opacity-60 mb-1 flex">
+                         {selectedDetailRoom.type === 'quarto' ? <Bed className="w-3 h-3" /> : <Receipt className="w-3 h-3" />}
+                         {selectedDetailRoom.type === 'quarto' ? 'Hospedagem' : 'Comanda Avulsa'}
+                       </p>
+                       <h2 className="text-4xl md:text-5xl font-black tracking-tighter mb-1 leading-none">
+                         {selectedDetailRoom.type === 'quarto' ? `Quarto ${selectedDetailRoom.number}` : selectedDetailRoom.number}
+                       </h2>
+                       <div className="flex items-center gap-4 text-white/80 font-medium mt-3">
+                          {selectedDetailRoom.type === 'quarto' && (
+                            <span className="flex items-center gap-1.5"><Users className="w-4 h-4" /> Capacidade: {selectedDetailRoom.capacity}</span>
+                          )}
                          {selectedDetailRoom.status === 'ocupado' && (
                             <span className="flex items-center gap-1.5 font-bold text-white"><Calendar className="w-4 h-4" /> Desde {selectedDetailRoom.activeComanda?.checkInDate}</span>
                          )}
@@ -459,30 +588,49 @@ export default function RoomsPage() {
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogContent className="sm:max-w-[425px] bg-white">
           <DialogHeader>
-            <DialogTitle>{editingRoom ? "Editar Quarto" : "Cadastrar Novo Quarto"}</DialogTitle>
+            <DialogTitle>{editingRoom ? "Editar" : "Cadastrar Novo"}</DialogTitle>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
+          <div className="grid gap-6 py-4">
+            <div className="flex bg-slate-100 p-1 rounded-xl gap-1">
+              <Button 
+                variant={tempType === "quarto" ? "default" : "ghost"} 
+                className={`flex-1 rounded-lg font-bold ${tempType === "quarto" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
+                onClick={() => setTempType("quarto")}
+              >
+                <Bed className="w-4 h-4 mr-2" /> Quarto
+              </Button>
+              <Button 
+                variant={tempType === "avulsa" ? "default" : "ghost"} 
+                className={`flex-1 rounded-lg font-bold ${tempType === "avulsa" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
+                onClick={() => setTempType("avulsa")}
+              >
+                <Receipt className="w-4 h-4 mr-2" /> Avulsa
+              </Button>
+            </div>
+
             <div>
-               <Label htmlFor="num" className="text-slate-700">Número ou Identificação</Label>
-               <Input id="num" value={tempNum} onChange={(e) => setTempNum(e.target.value)} placeholder="101" className="mt-1.5" />
+               <Label htmlFor="num" className="text-slate-700 font-bold">{tempType === 'quarto' ? 'Número do Quarto' : 'Identificação (Mesa/DayUse)'}</Label>
+               <Input id="num" value={tempNum} onChange={(e) => setTempNum(e.target.value)} placeholder={tempType === 'quarto' ? '101' : 'Mesa 05'} className="mt-1.5 h-11" />
             </div>
             
             <div className="grid grid-cols-2 gap-4">
-               <div>
-                  <Label htmlFor="cap" className="text-slate-700">Capacidade</Label>
-                  <Input id="cap" type="number" min="1" value={tempCap} onChange={(e) => setTempCap(e.target.value)} placeholder="2" className="mt-1.5" />
-               </div>
-               <div>
-                  <Label htmlFor="status" className="text-slate-700">Status</Label>
+               {tempType === 'quarto' && (
+                 <div>
+                    <Label htmlFor="cap" className="text-slate-700 font-bold">Capacidade</Label>
+                    <Input id="cap" type="number" min="1" value={tempCap} onChange={(e) => setTempCap(e.target.value)} placeholder="2" className="mt-1.5 h-11" />
+                 </div>
+               )}
+               <div className={tempType === 'avulsa' ? 'col-span-2' : ''}>
+                  <Label htmlFor="status" className="text-slate-700 font-bold">Status Inicial</Label>
                   <select 
                     id="status" 
                     value={tempStatus} 
                     onChange={(e) => setTempStatus(e.target.value as RoomStatus)} 
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1.5"
+                    className="flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1.5 focus:ring-2 focus:ring-primary/20"
                   >
-                     <option value="livre">Disponível</option>
-                     <option value="ocupado">Ocupado</option>
-                     <option value="manutencao">Manutenção/Limpeza</option>
+                     <option value="livre">{tempType === 'quarto' ? 'Pronto para Hóspede' : 'Disponível'}</option>
+                     <option value="ocupado">{tempType === 'quarto' ? 'Já Ocupado' : 'Comanda Aberta'}</option>
+                     {tempType === 'quarto' && <option value="manutencao">Em Manutenção/Limpeza</option>}
                   </select>
                </div>
             </div>
@@ -502,7 +650,7 @@ export default function RoomsPage() {
           <div className="bg-slate-900 p-6 text-white text-center">
              <Receipt className="w-10 h-10 text-primary mx-auto mb-2" />
              <h2 className="text-2xl font-bold tracking-tight">Fechamento de Conta</h2>
-             <p className="text-slate-400 text-sm">Quarto {selectedCloseRoom?.number} • {selectedCloseRoom?.activeComanda?.checkInDate}</p>
+             <p className="text-slate-400 text-sm">{selectedCloseRoom?.type === 'quarto' ? 'Quarto' : 'Comanda'} {selectedCloseRoom?.number} • {selectedCloseRoom?.activeComanda?.checkInDate}</p>
           </div>
           
           <div className="p-6">
@@ -589,26 +737,43 @@ export default function RoomsPage() {
           </div>
           
           <div className="bg-white p-4 border-2 border-slate-200 rounded-xl shadow-sm mb-6">
-             <div className="w-48 h-48 bg-slate-900 border-[8px] border-white relative flex items-center justify-center">
-                <div className="absolute inset-0 grid grid-cols-4 grid-rows-4 gap-1 p-2">
-                   {Array.from({length: 16}).map((_, i) => (
-                      <div key={i} className={`bg-white ${Math.random() > 0.4 ? 'opacity-100' : 'opacity-0'} rounded-sm`} />
-                   ))}
-                </div>
-                <div className="w-12 h-12 bg-white rounded flex items-center justify-center z-10 p-1">
-                   <div className="w-full h-full bg-primary rounded-sm flex items-center justify-center">
-                      <QrCode className="text-white w-6 h-6" />
-                   </div>
-                </div>
+             <div className="w-48 h-48 bg-slate-50 relative flex items-center justify-center overflow-hidden rounded-lg">
+                {qrCodeUrl ? (
+                  <img src={qrCodeUrl} alt="QR Code" className="w-full h-full object-contain" />
+                ) : (
+                  <div className="flex flex-col items-center gap-2 text-slate-400">
+                    <RefreshCcw className="w-8 h-8 animate-spin" />
+                    <span className="text-[10px] font-bold uppercase">Gerando...</span>
+                  </div>
+                )}
              </div>
           </div>
           
           <div className="flex gap-3 w-full">
-            <Button className="flex-1 bg-slate-100 text-slate-800 hover:bg-slate-200 border-none shadow-none font-semibold">
+            <Button 
+              className="flex-1 bg-slate-100 text-slate-800 hover:bg-slate-200 border-none shadow-none font-semibold"
+              onClick={() => {
+                const menuUrl = `${productionUrl}/${companySlug}/menu?mesa=${selectedQrRoom?.number}`
+                navigator.clipboard.writeText(menuUrl)
+                alert("Link copiado para a área de transferência!")
+              }}
+            >
                Copiar Link
             </Button>
-            <Button className="flex-1 bg-primary text-white hover:bg-primary/90 font-semibold shadow-sm">
-               Baixar/Imprimir
+            <Button 
+              className="flex-1 bg-primary text-white hover:bg-primary/90 font-semibold shadow-sm"
+              onClick={() => {
+                if (qrCodeUrl) {
+                  const link = document.createElement('a')
+                  link.href = qrCodeUrl
+                  link.download = `qrcode-quarto-${selectedQrRoom?.number}.png`
+                  document.body.appendChild(link)
+                  link.click()
+                  document.body.removeChild(link)
+                }
+              }}
+            >
+               Baixar Imagem
             </Button>
           </div>
         </DialogContent>
